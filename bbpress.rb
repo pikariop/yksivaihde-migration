@@ -198,10 +198,10 @@ class ImportScripts::Bbpress < ImportScripts::Base
         SELECT post_id as id,
                poster_id,
                post_time,
-               post_text,
+               post_text
           FROM #{BB_PRESS_PREFIX}posts
-          WHERE id > #{last_post_id}
-      ORDER BY id
+          WHERE post_id > #{last_post_id}
+      ORDER BY post_id
          LIMIT #{BATCH_SIZE}
       SQL
       ).to_a
