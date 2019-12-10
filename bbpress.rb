@@ -39,75 +39,55 @@ class ImportScripts::Bbpress < ImportScripts::Base
   def import_users
     puts "", "importing users..."
 
-    last_user_id = -1
-    total_users = bbpress_query(<<-SQL
-      SELECT COUNT(DISTINCT(u.id)) AS cnt
-      FROM #{BB_PRESS_PREFIX}users u
-      LEFT JOIN #{BB_PRESS_PREFIX}posts p ON p.poster_id = u.id
-        WHERE user_email LIKE '%@%'
+    users = bbpress_query(<<-SQL
+      SELECT u.id, u.user_nicename, u.display_name, u.user_email, u.user_registered, u.user_url, u.user_pass, p.last_seen_at
+        FROM #{BB_PRESS_PREFIX}users u
+        LEFT JOIN (
+          SELECT poster_id, max(poster_time) as last_seen_at
+          FROM bb_posts
+          GROUP BY poster_id
+        ) p ON p.poster_id = u.id
+    ORDER BY p.last_seen_at desc, u.user_registered desc;
     SQL
-    ).first["cnt"]
+    ).to_a
 
-    batches(BATCH_SIZE) do |offset|
-      users = bbpress_query(<<-SQL
-        SELECT u.id, user_nicename, display_name, user_email, user_registered, user_url, user_pass
-          FROM #{BB_PRESS_PREFIX}users u
-          LEFT JOIN #{BB_PRESS_PREFIX}posts p ON p.poster_id = u.id
-         WHERE user_email LIKE '%@%'
-           AND u.id > #{last_user_id}
-      GROUP BY u.id
-      ORDER BY u.id
-         LIMIT #{BATCH_SIZE}
-      SQL
-      ).to_a
+    break if users.empty?
 
-      break if users.empty?
+    last_user_id = users[-1]["id"]
+    user_ids = users.map { |u| u["id"].to_i }
 
-      last_user_id = users[-1]["id"]
-      user_ids = users.map { |u| u["id"].to_i }
+    #next if all_records_exist?(:users, user_ids)
 
-      next if all_records_exist?(:users, user_ids)
+    user_ids_sql = user_ids.join(",")
 
-      user_ids_sql = user_ids.join(",")
+    users_description = {}
+    bbpress_query(<<-SQL
+      SELECT user_id, meta_value as description
+        FROM #{BB_PRESS_PREFIX}usermeta
+       WHERE user_id IN (#{user_ids_sql})
+         AND meta_key = 'description'
+    SQL
+    ).each { |um| users_description[um["user_id"]] = um["description"] }
+    bbpress_query(<<-SQL
+      SELECT user_id, meta_value as location
+        FROM #{BB_PRESS_PREFIX}usermeta
+       WHERE user_id IN (#{user_ids_sql})
+         AND meta_key = 'location'
+    SQL
+    ).each { |um| users_description[um["user_id"]] = um["location"] }
 
-      users_description = {}
-      bbpress_query(<<-SQL
-        SELECT user_id, meta_value as description
-          FROM #{BB_PRESS_PREFIX}usermeta
-         WHERE user_id IN (#{user_ids_sql})
-           AND meta_key = 'description'
-      SQL
-      ).each { |um| users_description[um["user_id"]] = um["description"] }
-      bbpress_query(<<-SQL
-        SELECT user_id, meta_value as location
-          FROM #{BB_PRESS_PREFIX}usermeta
-         WHERE user_id IN (#{user_ids_sql})
-           AND meta_key = 'location'
-      SQL
-      ).each { |um| users_description[um["user_id"]] = um["location"] }
-
-      users_last_activity = {}
-      bbpress_query(<<-SQL
-        SELECT user_id, meta_value as last_activity
-          FROM #{BB_PRESS_PREFIX}usermeta
-         WHERE user_id IN (#{user_ids_sql})
-           AND meta_key = 'last_posted'
-      SQL
-      ).each { |um| users_last_activity[um["user_id"]] = um["last_activity"] }
-
-      create_users(users, total: total_users, offset: offset) do |u|
-        {
-          id: u["id"].to_i,
-          username: u["user_nicename"],
-          password: u["user_pass"],
-          email: u["user_email"].downcase,
-          name: u["display_name"].presence || u['user_nicename'],
-          created_at: u["user_registered"],
-          website: u["user_url"],
-          bio_raw: users_description[u["id"]],
-          last_seen_at: users_last_activity[u["id"]],
-        }
-      end
+    create_users(users, total: total_users, offset: offset) do |u|
+    l {
+        id: u["id"].to_i,
+        username: u["user_nicename"],
+        password: u["user_pass"],
+        email: u["user_email"].downcase,
+        name: u["display_name"].presence || u['user_nicename'],
+        created_at: u["user_registered"],
+        website: u["user_url"],
+        bio_raw: users_description[u["id"]],
+        last_seen_at: u["last_seen_at"]],
+      }
     end
   end
 
