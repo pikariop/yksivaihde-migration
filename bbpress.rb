@@ -98,39 +98,15 @@ class ImportScripts::Bbpress < ImportScripts::Base
     anon_names = Hash.new
     emails = Array.new
 
-    # Original bbpress instance had no referential integrity and removed users were hard deleted from the database. Gather 'Anonymous' users by posts without author in the user table
+    # Original bbpress instance had no referential integrity and removed users were hard deleted from the database. Gather 'Anonymous' users by posts that are not associated with an author in the user table and create an unique anonymous user for each post.
     bbpress_query(<<-SQL
       SELECT post_id
         FROM #{BB_PRESS_PREFIX}posts
        WHERE user_id not in (SELECT id from bb_users)'
     SQL
     ).each do |pm|
-      anon_posts[pm['post_id']] = anon_posts[pm['post_id']]
-
-      if pm['meta_key'] == '_bbp_anonymous_email'
-        anon_posts[pm['post_id']]['email'] = pm['meta_value']
-      end
-      if pm['meta_key'] == '_bbp_anonymous_name'
-        anon_posts[pm['post_id']]['name'] = pm['meta_value']
-      end
-      if pm['meta_key'] == '_bbp_anonymous_website'
-        anon_posts[pm['post_id']]['website'] = pm['meta_value']
-      end
-    end
-
-    # gather every existent username
-    anon_posts.each do |id, post|
-      anon_names[post['name']] = Hash.new if not anon_names[post['name']]
-      # overwriting email address, one user can only use one email address
-    end
-
-    # make sure every user name has a unique email address
-    anon_names.each do |k, name|
-      if not emails.include? name['email']
-        emails.push ( name['email'])
-      else
-        name['email'] = "anonymous_#{SecureRandom.hex}@no-email.invalid"
-      end
+      anon_posts[pm['post_id']] = pm['post_id']
+      anon_posts[pm['post_id']]['email'] = "anonymous_#{SecureRandom.hex}@no-email.invalid"
     end
 
     create_users(anon_names) do |k, n|
@@ -195,22 +171,11 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
       post_ids_sql = post_ids.join(",")
 
-      anon_names = {}
-      bbpress_query(<<-SQL
-        SELECT post_id, meta_value
-          FROM #{BB_PRESS_PREFIX}postmeta
-         WHERE post_id IN (#{post_ids_sql})
-           AND meta_key = '_bbp_anonymous_name'
-      SQL
-      ).each { |pm| anon_names[pm["post_id"]] = pm["meta_value"] }
-
       create_posts(posts, total: total_posts, offset: offset) do |p|
         skip = false
 
-        user_id = user_id_from_imported_user_id(p["post_author"]) ||
-                  find_user_by_import_id(p["post_author"]).try(:id) ||
-                  user_id_from_imported_user_id(anon_names[p['id']]) ||
-                  find_user_by_import_id(anon_names[p['id']]).try(:id) ||
+        user_id = user_id_from_imported_user_id(p["poster_id"]) ||
+                  find_user_by_import_id(p["poster_id"]).try(:id) ||
                   -1
 
         post = {
