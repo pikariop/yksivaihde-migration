@@ -151,11 +151,23 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
     batches(BATCH_SIZE) do |offset|
       posts = bbpress_query(<<-SQL
-        SELECT post_id as id,
-               poster_id,
-               post_time,
-               post_text
-          FROM #{BB_PRESS_PREFIX}posts
+        SELECT posts.post_id as id,
+               posts.poster_id,
+               posts.post_time,
+               posts.post_text,
+               posts.post_position,
+               topics.topic_title,
+               topics.topic_id,
+               topics.topic_closed
+          FROM #{BB_PRESS_PREFIX}posts as posts
+          LEFT JOIN (
+            SELECT t.topic_id,
+                   t.topic_title
+            FROM #{BB_PRESS_PREFIX}topics t
+            INNER JOIN #{BB_PRESS_PREFIX}posts p
+            ON t.topic_id = p.topic_id
+            AND p.post_position=1
+          ) AS topics
           WHERE post_id > #{last_post_id}
       ORDER BY post_id
          LIMIT #{BATCH_SIZE}
@@ -189,17 +201,11 @@ class ImportScripts::Bbpress < ImportScripts::Base
           post[:raw].gsub!(/\<pre\>\<code(=[a-z]*)?\>(.*?)\<\/code\>\<\/pre\>/im) { "```\n#{@he.decode($2)}\n```" }
         end
 
-        if p["post_type"] == "topic"
-          post[:category] = category_id_from_imported_category_id(p["post_parent"])
-          post[:title] = CGI.unescapeHTML(p["post_title"])
+        if p["post_position"] == 1
+          post[:category] = category_id_from_imported_category_id(p["forum_id"])
+          post[:title] = CGI.unescapeHTML(p["topic_title"])
         else
-          if parent = topic_lookup_from_imported_post_id(p["post_parent"])
-            post[:topic_id] = parent[:topic_id]
-            post[:reply_to_post_number] = parent[:post_number] if parent[:post_number] > 1
-          else
-            puts "Skipping #{p["id"]}: #{p["post_content"][0..40]}"
-            skip = true
-          end
+            post[:topic_id] = p["topic_id"]
         end
 
         skip ? nil : post
