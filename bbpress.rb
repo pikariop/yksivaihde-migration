@@ -67,6 +67,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
        WHERE user_id IN (#{user_ids_sql})
          AND meta_key = 'description'
     SQL
+
+    users_location = {}
     ).each { |um| users_description[um["user_id"]] = um["description"] }
     bbpress_query(<<-SQL
       SELECT user_id, meta_value as location
@@ -74,7 +76,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
        WHERE user_id IN (#{user_ids_sql})
          AND meta_key = 'location'
     SQL
-    ).each { |um| users_description[um["user_id"]] = um["location"] }
+    ).each { |um| users_location[um["user_id"]] = um["location"] }
 
     create_users(users, total: total_users, offset: offset) do |u|
     l {
@@ -86,7 +88,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
         created_at: u["user_registered"],
         website: u["user_url"],
         bio_raw: users_description[u["id"]],
-        last_seen_at: u["last_seen_at"]],
+        location: users_location[u["id"]],
+        last_seen_at: u["last_seen_at"]]
       }
     end
   end
