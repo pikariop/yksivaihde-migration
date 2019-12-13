@@ -80,7 +80,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     l {
         id: u["id"].to_i,
         username: u["user_nicename"],
-        password: u["user_pass"],
+        password: SecureRandom.hex,
         email: u["user_email"].downcase,
         name: u["display_name"].presence || u['user_nicename'],
         created_at: u["user_registered"],
