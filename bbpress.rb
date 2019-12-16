@@ -43,7 +43,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
       SELECT u.id, u.user_nicename, u.display_name, u.user_email, u.user_registered, u.user_url, u.user_pass, p.last_seen_at
         FROM #{BB_PRESS_PREFIX}users u
         LEFT JOIN (
-          SELECT poster_id, max(poster_time) as last_seen_at
+          SELECT poster_id, max(post_time) as last_seen_at
           FROM bb_posts
           GROUP BY poster_id
         ) p ON p.poster_id = u.id
@@ -51,12 +51,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
     SQL
     ).to_a
 
-    break if users.empty?
-
     last_user_id = users[-1]["id"]
     user_ids = users.map { |u| u["id"].to_i }
-
-    #next if all_records_exist?(:users, user_ids)
 
     user_ids_sql = user_ids.join(",")
 
@@ -67,9 +63,9 @@ class ImportScripts::Bbpress < ImportScripts::Base
        WHERE user_id IN (#{user_ids_sql})
          AND meta_key = 'description'
     SQL
+    ).each { |um| users_description[um["user_id"]] = um["description"] }
 
     users_location = {}
-    ).each { |um| users_description[um["user_id"]] = um["description"] }
     bbpress_query(<<-SQL
       SELECT user_id, meta_value as location
         FROM #{BB_PRESS_PREFIX}usermeta
@@ -78,8 +74,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
     SQL
     ).each { |um| users_location[um["user_id"]] = um["location"] }
 
-    create_users(users, total: total_users, offset: offset) do |u|
-    l {
+    create_users(users) do |u|
+      {
         id: u["id"].to_i,
         username: u["user_nicename"],
         password: SecureRandom.hex,
@@ -89,7 +85,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
         website: u["user_url"],
         bio_raw: users_description[u["id"]],
         location: users_location[u["id"]],
-        last_seen_at: u["last_seen_at"]]
+        last_seen_at: u["last_seen_at"]
       }
     end
   end
@@ -226,9 +222,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
         SELECT id,
                guid
           FROM #{BB_PRESS_PREFIX}posts
-         WHERE post_status <> 'spam'
-           AND post_type IN ('topic')
-           AND id > #{last_topic_id}
+           WHERE id > #{last_topic_id}
       ORDER BY id
          LIMIT #{BATCH_SIZE}
       SQL
