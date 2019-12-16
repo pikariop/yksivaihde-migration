@@ -101,7 +101,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     bbpress_query(<<-SQL
       SELECT post_id
         FROM #{BB_PRESS_PREFIX}posts
-       WHERE user_id not in (SELECT id from bb_users)'
+       WHERE user_id not in (SELECT id from bb_users)
     SQL
     ).each do |pm|
       anon_posts[pm['post_id']] = pm['post_id']
