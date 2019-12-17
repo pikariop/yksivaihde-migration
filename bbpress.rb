@@ -1,6 +1,7 @@
 # Original file https://github.com/discourse/discourse/blob/master/script/import_scripts/bbpress.rb
 
 require 'mysql2'
+require 'uri'
 require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 class ImportScripts::Bbpress < ImportScripts::Base
@@ -40,13 +41,19 @@ class ImportScripts::Bbpress < ImportScripts::Base
     puts "", "importing users..."
 
     users = bbpress_query(<<-SQL
-      SELECT u.id, u.user_nicename, u.display_name, u.user_email, u.user_registered, u.user_url, u.user_pass, p.last_seen_at
+      SELECT u.id, u.user_nicename, u.display_name, u.user_email, u.user_registered, u.user_url, u.user_pass, p.last_seen_at, m.meta_value as avatar_url
         FROM #{BB_PRESS_PREFIX}users u
         LEFT JOIN (
           SELECT poster_id, max(post_time) as last_seen_at
           FROM bb_posts
           GROUP BY poster_id
         ) p ON p.poster_id = u.id
+        LEFT JOIN (
+          SELECT user_id, meta_value
+          FROM bb_usermeta
+          WHERE meta_key='avatar_file'
+        ) m on u.id=m.user_id
+
     ORDER BY p.last_seen_at desc, u.user_registered desc;
     SQL
     ).to_a
@@ -74,6 +81,16 @@ class ImportScripts::Bbpress < ImportScripts::Base
     SQL
     ).each { |um| users_location[um["user_id"]] = um["location"] }
 
+    users_avatar = {}
+    bbpress_query(<<-SQL
+      SELECT user_id, meta_value as avatar_url
+      FROM bb_usermeta
+      WHERE meta_key='avatar_file'
+      AND user_id IN (#{user_ids_sql})
+    SQL
+    ).each { |um| users_avatar[um["user_id"]] = URI.encode("http://www.yksivaihde.net/site/foorumi/avatars/" + um["avatar_url"]&.split("|").dig(0)) }
+
+
     create_users(users) do |u|
       {
         id: u["id"].to_i,
@@ -85,6 +102,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
         website: u["user_url"],
         bio_raw: users_description[u["id"]],
         location: users_location[u["id"]],
+        avatar_url: users_avatar[u["id"]],
         last_seen_at: u["last_seen_at"]
       }
     end
