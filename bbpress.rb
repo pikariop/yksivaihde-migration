@@ -180,6 +180,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
           LEFT JOIN bb_topics AS t
           ON p.topic_id=t.topic_id
           WHERE p.post_id > #{last_post_id}
+          AND p.post_status = 0
       ORDER BY p.post_id
          LIMIT #{BATCH_SIZE}
       SQL
