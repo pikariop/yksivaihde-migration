@@ -207,6 +207,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
           user_id: user_id,
           raw: p["post_text"],
           created_at: p["post_time"],
+          closed: p["topic_open"].to_i.zero?
         }
 
         if post[:raw].present?
