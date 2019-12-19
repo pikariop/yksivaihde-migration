@@ -168,25 +168,19 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
     batches(BATCH_SIZE) do |offset|
       posts = bbpress_query(<<-SQL
-        SELECT posts.post_id as id,
-               posts.poster_id,
-               posts.post_time,
-               posts.post_text,
-               posts.post_position,
-               topics.topic_title,
-               topics.topic_id,
-               topics.topic_closed
-          FROM #{BB_PRESS_PREFIX}posts as posts
-          LEFT JOIN (
-            SELECT t.topic_id,
-                   t.topic_title
-            FROM #{BB_PRESS_PREFIX}topics t
-            INNER JOIN #{BB_PRESS_PREFIX}posts p
-            ON t.topic_id = p.topic_id
-            AND p.post_position=1
-          ) AS topics
-          WHERE post_id > #{last_post_id}
-      ORDER BY post_id
+        SELECT p.post_id as id,
+               p.poster_id,
+               p.post_time,
+               p.post_text,
+               p.post_position,
+               t.topic_title,
+               t.topic_id,
+               t.topic_open
+          FROM #{BB_PRESS_PREFIX}posts as p
+          LEFT JOIN bb_topics AS t
+          ON p.topic_id=t.topic_id
+          WHERE p.post_id > #{last_post_id}
+      ORDER BY p.post_id
          LIMIT #{BATCH_SIZE}
       SQL
       ).to_a
