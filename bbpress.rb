@@ -97,7 +97,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
         username: u["user_nicename"],
         password: SecureRandom.hex,
         email: u["user_email"].downcase,
-        name: u["display_name"].presence || u['user_nicename'],
+        name: u["user_login"].presence || u['user_nicename'],
         created_at: u["user_registered"],
         website: u["user_url"],
         bio_raw: users_description[u["id"]],
