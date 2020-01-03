@@ -41,8 +41,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
     puts "", "importing users..."
 
     users = bbpress_query(<<-SQL
-      SELECT u.id, u.user_nicename, u.display_name, u.user_email, u.user_registered, u.user_url, u.user_pass, p.last_seen_at, m.meta_value as avatar_url
-        FROM #{BB_PRESS_PREFIX}users u
+      SELECT u.id, u.user_nicename, u.user_login, u.user_email, u.user_registered, u.user_url, u.user_pass, p.last_seen_at, m.meta_value as avatar_url
+        FROM wp_users u
         LEFT JOIN (
           SELECT poster_id, max(post_time) as last_seen_at
           FROM bb_posts
@@ -50,11 +50,11 @@ class ImportScripts::Bbpress < ImportScripts::Base
         ) p ON p.poster_id = u.id
         LEFT JOIN (
           SELECT user_id, meta_value
-          FROM bb_usermeta
+          FROM wp_usermeta
           WHERE meta_key='avatar_file'
         ) m on u.id=m.user_id
 
-    ORDER BY p.last_seen_at desc, u.user_registered desc;
+    ORDER BY p.last_seen_at desc, u.user_registered desc
     SQL
     ).to_a
 
@@ -66,7 +66,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     users_description = {}
     bbpress_query(<<-SQL
       SELECT user_id, meta_value as description
-        FROM #{BB_PRESS_PREFIX}usermeta
+        FROM wp_usermeta
        WHERE user_id IN (#{user_ids_sql})
          AND meta_key = 'description'
     SQL
@@ -75,7 +75,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     users_location = {}
     bbpress_query(<<-SQL
       SELECT user_id, meta_value as location
-        FROM #{BB_PRESS_PREFIX}usermeta
+        FROM wp_usermeta
        WHERE user_id IN (#{user_ids_sql})
          AND meta_key = 'location'
     SQL
@@ -84,7 +84,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     users_avatar = {}
     bbpress_query(<<-SQL
       SELECT user_id, meta_value as avatar_url
-      FROM bb_usermeta
+      FROM wp_usermeta
       WHERE meta_key='avatar_file'
       AND user_id IN (#{user_ids_sql})
     SQL
@@ -116,8 +116,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
     # Original bbpress instance had no referential integrity and removed users were hard deleted from the database. Gather 'Anonymous' users by posts that are not associated with an author in the user table and create an unique anonymous user for each post.
     bbpress_query(<<-SQL
       SELECT post_id
-        FROM #{BB_PRESS_PREFIX}posts
-       WHERE poster_id not in (SELECT id from bb_users)
+        FROM bb_posts
+       WHERE poster_id not in (SELECT id from wp_users)
     SQL
     ).each do |pm|
       anon_users[pm['post_id']] = fake_email #"anonymous_#{SecureRandom.hex}@no-email.invalid"
@@ -138,7 +138,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
     categories = bbpress_query(<<-SQL
       SELECT forum_id, forum_name, forum_desc
-        FROM #{BB_PRESS_PREFIX}forums
+        FROM bb_forums
     ORDER BY forum_id
     SQL
     )
@@ -159,7 +159,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     last_post_id = -1
     total_posts = bbpress_query(<<-SQL
       SELECT COUNT(*) count
-        FROM #{BB_PRESS_PREFIX}posts
+        FROM bb_posts
     SQL
     ).first["count"]
 
