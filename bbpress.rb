@@ -94,10 +94,10 @@ class ImportScripts::Bbpress < ImportScripts::Base
     create_users(users) do |u|
       {
         id: u["id"].to_i,
-        username: u["user_nicename"],
+        username: u["user_login"],
         password: SecureRandom.hex,
         email: u["user_email"].downcase,
-        name: u["user_login"].presence || u['user_nicename'],
+        name: u["display_name"].presence || u['user_nicename'],
         created_at: u["user_registered"],
         website: u["user_url"],
         bio_raw: users_description[u["id"]],
