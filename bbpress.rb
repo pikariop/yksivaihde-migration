@@ -170,11 +170,12 @@ class ImportScripts::Bbpress < ImportScripts::Base
                p.post_time,
                p.post_text,
                p.post_position,
+               p.forum_id,
                t.topic_title,
                t.topic_id,
                t.topic_open
-          FROM #{BB_PRESS_PREFIX}posts as p
-          LEFT JOIN bb_topics AS t
+          FROM bb_posts as p
+          INNER JOIN bb_topics AS t
           ON p.topic_id=t.topic_id
           WHERE p.post_id > #{last_post_id}
           AND p.post_status = 0
@@ -204,8 +205,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
           id: p["id"],
           user_id: user_id,
           raw: p["post_text"],
-          created_at: p["post_time"],
-          closed: p["topic_open"].to_i.zero?
+          created_at: p["post_time"]
         }
 
         if post[:raw].present?
@@ -215,10 +215,23 @@ class ImportScripts::Bbpress < ImportScripts::Base
         if p["post_position"] == 1
           post[:category] = category_id_from_imported_category_id(p["forum_id"])
           post[:title] = CGI.unescapeHTML(p["topic_title"])
+          post[:closed] = p["topic_open"].to_i.zero?
         else
-            post[:topic_id] = p["topic_id"]
+          parent_post_id=bbpress_query(<<-SQL
+            SELECT post_id
+            FROM bb_posts
+            WHERE topic_id=#{p["topic_id"]}
+            AND post_position=1
+          SQL
+           ).first["post_id"]
+          if parent_topic = topic_lookup_from_imported_post_id(parent_post_id)
+              post[:topic_id] = parent_topic[:topic_id]
+              post[:reply_to_post_number] = parent_topic[:post_number] if parent_topic[:post_number] > 1
+          else
+            puts "Unable to associate post with import id #{p["id"]} to parent topic #{p["topic_id"]} : #{p["post_text"][0..40]}"
+            skip = true
+          end
         end
-
         skip ? nil : post
       end
     end
