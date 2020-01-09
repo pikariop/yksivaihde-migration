@@ -1,7 +1,9 @@
 # Original file https://github.com/discourse/discourse/blob/master/script/import_scripts/bbpress.rb
 
+require 'htmlentities'
 require 'mysql2'
 require 'uri'
+
 require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 class ImportScripts::Bbpress < ImportScripts::Base
@@ -200,13 +202,9 @@ class ImportScripts::Bbpress < ImportScripts::Base
         post = {
           id: p["id"],
           user_id: user_id,
-          raw: p["post_text"],
+          raw: preprocess_post_raw(p["post_text"]),
           created_at: p["post_time"]
         }
-
-        if post[:raw].present?
-          post[:raw].gsub!(/\<pre\>\<code(=[a-z]*)?\>(.*?)\<\/code\>\<\/pre\>/im) { "```\n#{@he.decode($2)}\n```" }
-        end
 
         if p["post_position"] == 1
           post[:category] = category_id_from_imported_category_id(p["forum_id"])
@@ -264,5 +262,109 @@ class ImportScripts::Bbpress < ImportScripts::Base
   end
 
 end
+
+  def preprocess_post_raw(raw)
+    return "" if raw.blank?
+
+    # decode HTML entities
+    raw = @he.decode(raw)
+
+    # fix whitespaces
+    raw.gsub!(/(\\r)?\\n/, "\n")
+    raw.gsub!("\\t", "\t")
+
+    # [HIGHLIGHT="..."]
+    raw.gsub!(/\[highlight="?(\w+)"?\]/i) { "\n```#{$1.downcase}\n" }
+
+    # [CODE]...[/CODE]
+    # [HIGHLIGHT]...[/HIGHLIGHT]
+    raw.gsub!(/\[\/?code\]/i, "\n```\n")
+    raw.gsub!(/\[\/?highlight\]/i, "\n```\n")
+
+    # [SAMP]...[/SAMP]
+    raw.gsub!(/\[\/?samp\]/i, "`")
+
+    # replace all chevrons with HTML entities
+    # NOTE: must be done
+    #  - AFTER all the "code" processing
+    #  - BEFORE the "quote" processing
+   # raw.gsub!(/`([^`]+)`/im) { "`" + $1.gsub("<", "\u2603") + "`" }
+   # raw.gsub!("<", "&lt;")
+   # raw.gsub!("\u2603", "<")
+
+   # raw.gsub!(/`([^`]+)`/im) { "`" + $1.gsub(">", "\u2603") + "`" }
+   # raw.gsub!(">", "&gt;")
+   # raw.gsub!("\u2603", ">")
+
+    # [URL=...]...[/URL]
+    raw.gsub!(/\[url="?([^"]+?)"?\](.*?)\[\/url\]/im) { "[#{$2.strip}](#{$1})" }
+    raw.gsub!(/\[url="?(.+?)"?\](.+)\[\/url\]/im) { "[#{$2.strip}](#{$1})" }
+
+    # [URL]...[/URL]
+    # [img]...[/img]
+    # <p>...</p>
+    raw.gsub!(/\[\/?url\]/i, "")
+    raw.gsub!(/\[\/?img\]/i, "")
+    raw.gsub!(/\<\/?p\>/i, "")
+
+    # [FONT=blah] and [COLOR=blah]
+    raw.gsub! /\[FONT=.*?\](.*?)\[\/FONT\]/im, '\1'
+    raw.gsub! /\[COLOR=.*?\](.*?)\[\/COLOR\]/im, '\1'
+    raw.gsub! /\[COLOR=#.*?\](.*?)\[\/COLOR\]/im, '\1'
+
+    raw.gsub! /\[SIZE=.*?\](.*?)\[\/SIZE\]/im, '\1'
+    raw.gsub! /\[SUP\](.*?)\[\/SUP\]/im, '\1'
+    raw.gsub! /\[h=.*?\](.*?)\[\/h\]/im, '\1'
+
+    # [CENTER]...[/CENTER]
+    raw.gsub! /\[CENTER\](.*?)\[\/CENTER\]/im, '\1'
+
+    # [INDENT]...[/INDENT]
+    raw.gsub! /\[INDENT\](.*?)\[\/INDENT\]/im, '\1'
+
+    # Tables to MD
+    raw.gsub!(/\[TABLE.*?\](.*?)\[\/TABLE\]/im) { |t|
+      rows = $1.gsub!(/\s*\[TR\](.*?)\[\/TR\]\s*/im) { |r|
+        cols = $1.gsub! /\s*\[TD.*?\](.*?)\[\/TD\]\s*/im, '|\1'
+        "#{cols}|\n"
+      }
+      header, rest = rows.split "\n", 2
+      c = header.count "|"
+      sep = "|---" * (c - 1)
+      "#{header}\n#{sep}|\n#{rest}\n"
+    }
+
+    # [YOUTUBE]<id>[/YOUTUBE]
+    raw.gsub!(/\[youtube\](.+?)\[\/youtube\]/i) { "\n//youtu.be/#{$1}\n" }
+
+    # [VIDEO=youtube;<id>]...[/VIDEO]
+    raw.gsub!(/\[video=youtube;([^\]]+)\].*?\[\/video\]/i) { "\n//youtu.be/#{$1}\n" }
+
+    # Fix uppercase B U and I tags
+    raw.gsub!(/(\[\/?[BUI]\])/i) { $1.downcase }
+
+    # More Additions ....
+
+    # [spoiler=Some hidden stuff]SPOILER HERE!![/spoiler]
+    raw.gsub!(/\[spoiler="?(.+?)"?\](.+?)\[\/spoiler\]/im) { "\n#{$1}\n[spoiler]#{$2}[/spoiler]\n" }
+
+    # [IMG][IMG]http://i63.tinypic.com/akga3r.jpg[/IMG][/IMG]
+    raw.gsub!(/\[IMG\]\[IMG\](.+?)\[\/IMG\]\[\/IMG\]/i) { "[IMG]#{$1}[/IMG]" }
+
+    # convert list tags to ul and list=1 tags to ol
+    # (basically, we're only missing list=a here...)
+    # (https://meta.discourse.org/t/phpbb-3-importer-old/17397)
+    raw.gsub!(/\[list\](.*?)\[\/list\]/im, '[ul]\1[/ul]')
+    raw.gsub!(/\[list=1\](.*?)\[\/list\]/im, '[ol]\1[/ol]')
+    raw.gsub!(/\[list\](.*?)\[\/list:u\]/im, '[ul]\1[/ul]')
+    raw.gsub!(/\[list=1\](.*?)\[\/list:o\]/im, '[ol]\1[/ol]')
+    # convert *-tags to li-tags so bbcode-to-md can do its magic on phpBB's lists:
+    raw.gsub!(/\[\*\]\n/, '')
+    raw.gsub!(/\[\*\](.*?)\[\/\*:m\]/, '[li]\1[/li]')
+    raw.gsub!(/\[\*\](.*?)\n/, '[li]\1[/li]')
+    raw.gsub!(/\[\*=1\]/, '')
+
+    raw
+  end
 
 ImportScripts::Bbpress.new.perform
