@@ -28,8 +28,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
   end
 
   def execute
+    create_anonymous_user
     import_users
-#    import_anonymous_users
     import_categories
     import_topics_and_posts
     import_private_messages
@@ -108,28 +108,23 @@ class ImportScripts::Bbpress < ImportScripts::Base
     end
   end
 
-  def import_anonymous_users
-    puts "", "importing anonymous users..."
+  # Create anonymous user to be substituted as post author if original author is missing from user table
+  def create_anonymous_user
+    puts "", "creating anonymous user..."
 
-    anon_users = Hash.new
+    users = [
+        id: "-666",
+        email: "anonymous_#{SecureRandom.hex}@no-email.invalid".to_s,
+        name: "Anonymous"
+    ]
 
-    # Original bbpress instance had no referential integrity and removed users were hard deleted from the database. Gather 'Anonymous' users by posts that are not associated with an author in the user table and create an unique anonymous user for each post.
-    bbpress_query(<<-SQL
-      SELECT post_id
-        FROM bb_posts
-       WHERE poster_id not in (SELECT id from wp_users)
-    SQL
-    ).each do |pm|
-      anon_users[pm['post_id']] = fake_email #"anonymous_#{SecureRandom.hex}@no-email.invalid"
-    end
-
-    create_users(anon_users) do |id, email|
-      {
-        id: id,
-        email: email.downcase,
-        name: "Anonymous"+id.to_s,
+    create_users(users) do |u|
+    {
+        id: u[:id].to_i,
+        email: u[:email].downcase,
+        name: u[:name],
         active: false
-      }
+    }
     end
   end
 
@@ -199,6 +194,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
         user_id = user_id_from_imported_user_id(p["poster_id"]) ||
                   find_user_by_import_id(p["poster_id"]).try(:id) ||
+                  find_user_by_import_id(-666) ||
                   -1
 
         post = {
