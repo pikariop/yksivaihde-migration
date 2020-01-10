@@ -170,12 +170,14 @@ class ImportScripts::Bbpress < ImportScripts::Base
                p.forum_id,
                t.topic_title,
                t.topic_id,
-               t.topic_open
+               t.topic_open,
+               t.topic_status
           FROM bb_posts as p
           INNER JOIN bb_topics AS t
           ON p.topic_id=t.topic_id
           WHERE p.post_id > #{last_post_id}
           AND p.post_status = 0
+          AND t.topic_status = 0
           AND t.topic_title IS NOT NULL
       ORDER BY p.post_id
          LIMIT #{BATCH_SIZE}
