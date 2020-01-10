@@ -198,7 +198,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
         user_id = user_id_from_imported_user_id(p["poster_id"]) ||
                   find_user_by_import_id(p["poster_id"]).try(:id) ||
-                  find_user_by_import_id(-666) ||
+                  find_user_by_import_id(-666).try(:id) ||
                   -1
 
         post = {
