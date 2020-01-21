@@ -263,11 +263,41 @@ class ImportScripts::Bbpress < ImportScripts::Base
     @client.query(sql, cache_rows: false)
   end
 
+  def convert_bbpress_forum_urls(raw)
+    URI.extract(raw) do |u|
+      uri = URI(u)
+      uri_query_id = URI.decode_www_form(uri.query).assoc('id').try(:last)
+
+      if uri.host == "www.yksivaihde.net"
+        new_uri = URI("https://" + uri.host)
+
+        if uri.path == "/site/foorumi/topic.php"
+            new_uri.path = "/old/#{uri_query_id}"
+
+            post_id = uri.fragment.match(/post\-([0-9]+)/i) {$1}
+            new_uri.path += "/#{post_id}" unless post_id.nil?
+
+        else if uri.path == "site/foorumi/forum.php"
+            new_uri.path = "/old_cat/#{uri_query_id}"
+
+        else if uri.path == "site/foorumi/profile.php"
+            user = find_user_by_import_id(uri_query_id)
+            new_uri.path = "/u/#{user.username}"
+        end
+
+        raw.gsub!(uri.to_s, new_uri.to_s)
+      end
+    end
+  end
+
   def preprocess_post_raw(raw)
     return "" if raw.blank?
 
     # decode HTML entities
     raw = @he.decode(raw)
+
+    # Convert bbpress urls to discourse permalink format
+    raw = convert_bbpress_forum_urls(raw)
 
     # fix whitespaces
     raw.gsub!(/(\\r)?\\n/, "\n")
@@ -366,5 +396,5 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
     raw
   end
-
+end
 ImportScripts::Bbpress.new.perform
