@@ -37,7 +37,6 @@ class ImportScripts::Bbpress < ImportScripts::Base
     import_topics_and_posts
     import_private_messages
     import_attachments
-    create_permalinks
   end
 
   def import_users
@@ -149,6 +148,15 @@ class ImportScripts::Bbpress < ImportScripts::Base
         description: c['forum_desc']
       }
     end
+
+    puts "Creating permalinks for categories"
+    categories.each do |c|
+        Permalink.create(
+            url: "old_cat/"+c["forum_id"].to_s,
+            category_id: category_id_from_imported_category_id(c["forum_id"])
+        ) rescue nil
+    end
+
   end
 
   def import_topics_and_posts
@@ -231,70 +239,6 @@ class ImportScripts::Bbpress < ImportScripts::Base
         end
         skip ? nil : post
       end
-    end
-  end
-
-  def create_permalinks
-    puts "", "Creating permalinks..."
-
-    last_topic_id = -1
-    last_post_id = -1
-
-    total_posts = bbpress_query(<<-SQL
-      SELECT COUNT(*) count
-        FROM bb_posts
-    SQL
-    ).first["count"].to_i
-
-    total_topics = bbpress_query(<<-SQL
-      SELECT COUNT(*) count
-        FROM bb_topics
-    SQL
-    ).first["count"].to_i
-
-    categories = bbpress_query(<<-SQL
-      SELECT forum_id, forum_name, forum_desc
-      FROM bb_forums
-      ORDER BY forum_id
-    SQL
-    ).to_a
-
-    puts "Creating permalinks for categories"
-    categories.each do |c|
-        Permalink.create(
-            url: "old_cat/"+c["forum_id"].to_s,
-            category_id: category_id_from_imported_category_id(c["forum_id"])
-        ) rescue nil
-    end
-
-    puts "Creating permalinks for posts and topics"
-    batches(BATCH_SIZE) do |offset|
-    posts = bbpress_query(<<-SQL
-      SELECT p.post_id ,
-             p.poster_id,
-             p.post_time,
-             p.post_text,
-             p.post_position,
-             p.forum_id,
-             t.topic_title,
-             t.topic_id,
-             t.topic_open,
-             t.topic_status
-      FROM bb_posts as p
-      INNER JOIN bb_topics AS t
-      ON p.topic_id=t.topic_id
-      WHERE p.post_id > #{last_post_id}
-      AND p.post_status = 0
-      AND t.topic_status = 0
-      AND t.topic_title IS NOT NULL
-      ORDER BY p.post_id
-      LIMIT #{BATCH_SIZE}
-      SQL
-      ).to_a
-
-      break if posts.empty?
-
-      last_post_id = posts[-1]["post_id"].to_i
 
       posts.each do |p|
         post_id = post_id_from_imported_post_id(p["post_id"])
@@ -309,8 +253,6 @@ class ImportScripts::Bbpress < ImportScripts::Base
         topic_url = "old/#{p["topic_id"]}"
         post_url = topic_url + "/#{p["post_id"]}"
 
-        print "\rPost id: %d / %d [%2.2f %%] %s".freeze % [p['post_id'].to_i, total_posts.to_i, (p['post_id'].to_f / total_posts * 100).to_f, post_url.to_s]
-
         Permalink.create(post_id: post_id, url: post_url) rescue nil
         Permalink.create(topic_id: topic_id, url: topic_url) rescue nil
       end
@@ -320,8 +262,6 @@ class ImportScripts::Bbpress < ImportScripts::Base
   def bbpress_query(sql)
     @client.query(sql, cache_rows: false)
   end
-
-end
 
   def preprocess_post_raw(raw)
     return "" if raw.blank?
