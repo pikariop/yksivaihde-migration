@@ -386,10 +386,35 @@ class ImportScripts::Base
 
     end
 
+    import_avatar(u) unless u.custom_fields["import_avatar_url"].nil?
+
     post_create_action.try(:call, u) if u.persisted?
 
     u # If there was an error creating the user, u.errors has the messages
   end
+
+  def import_avatar(user)
+    avatar_url = user.custom_fields["import_avatar_url"]
+    filename = avatar_url.split("/").last
+
+    picture = HTTParty.get(avatar_url).body
+
+    file = Tempfile.new("profile-picture")
+    file.write(picture.encode("ASCII-8BIT").force_encoding("UTF-8")) rescue nil
+    file.rewind
+
+    upload = UploadCreator.new(file, filename).create_for(user.id)
+
+    return if !upload.persisted?
+
+    user.create_user_avatar
+    user.user_avatar.update(custom_upload_id: upload.id)
+    user.update(uploaded_avatar_id: upload.id)
+  ensure
+    file.close rescue nil
+    file.unlind rescue nil
+  end
+
 
   def find_existing_user(email, username)
     # Force the use of the index on the 'user_emails' table
