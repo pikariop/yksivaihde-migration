@@ -35,8 +35,6 @@ class ImportScripts::Bbpress < ImportScripts::Base
     import_users
     import_categories
     import_topics_and_posts
-    import_private_messages
-    import_attachments
   end
 
   def import_users
