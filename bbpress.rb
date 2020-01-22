@@ -271,16 +271,16 @@ class ImportScripts::Bbpress < ImportScripts::Base
       if uri.host == "www.yksivaihde.net"
         new_uri = URI("https://" + uri.host)
 
-        if uri.path == "/site/foorumi/topic.php"
+        if uri.path == "/site/foorumi/topic.php
             new_uri.path = "/old/#{uri_query_id}"
 
             post_id = uri.fragment.match(/post\-([0-9]+)/i) {$1}
             new_uri.path += "/#{post_id}" unless post_id.nil?
 
-        else if uri.path == "site/foorumi/forum.php"
+        elseif uri.path == "site/foorumi/forum.php"
             new_uri.path = "/old_cat/#{uri_query_id}"
 
-        else if uri.path == "site/foorumi/profile.php"
+        elseif uri.path == "site/foorumi/profile.php"
             user = find_user_by_import_id(uri_query_id)
             new_uri.path = "/u/#{user.username}"
         end
