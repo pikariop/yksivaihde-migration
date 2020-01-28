@@ -262,30 +262,68 @@ class ImportScripts::Bbpress < ImportScripts::Base
   end
 
   def convert_bbpress_forum_urls(raw)
-    URI.extract(raw) do |u|
+
+    # trim markdown url format '[]()' to avoid URI.extract parsing trailing )'s or ]'s
+    URI.extract(raw.gsub(/\((.*?)\)/i, ' \1 ').gsub(/\[(.*?)\]/i, ' \1 '), 'http') do |u|
       uri = URI(u)
-      uri_query_id = URI.decode_www_form(uri.query).assoc('id').try(:last)
 
-      if uri.host == "www.yksivaihde.net"
-        new_uri = URI("https://" + uri.host)
+      next if uri.host != "www.yksivaihde.net"
+      next if uri.query.nil?
 
-        if uri.path == "/site/foorumi/topic.php
-            new_uri.path = "/old/#{uri_query_id}"
+      # sanity check to trim any residue markdown that gets passed through by URI.extract
+      if u.to_s.match(/.+#post-[0-9]+/) != nil
+        uri = URI(uri.to_s.match(/(.+#post-[0-9]+)/i) {$1}) rescue nil
 
-            post_id = uri.fragment.match(/post\-([0-9]+)/i) {$1}
-            new_uri.path += "/#{post_id}" unless post_id.nil?
+      elsif u.to_s.match(/.+id=[0-9]+/) != nil
+        uri = URI(uri.to_s.match(/(.+#id=[0-9]+)/i) {$1}) rescue nil
+      else
+          p uri
+          next
+      end
 
-        elseif uri.path == "site/foorumi/forum.php"
-            new_uri.path = "/old_cat/#{uri_query_id}"
+      uri_query_id = URI.decode_www_form(uri.query).assoc('id')&.last.to_i rescue nil
 
-        elseif uri.path == "site/foorumi/profile.php"
-            user = find_user_by_import_id(uri_query_id)
-            new_uri.path = "/u/#{user.username}"
+      next if uri_query_id.nil?
+
+      new_uri = URI("https://" + uri.host)
+      converted = false
+
+      if uri.path == "/site/foorumi/topic.php"
+        new_uri.path = "/old/#{uri_query_id}"
+
+        post_id = uri.fragment.match(/post\-([0-9]+)/i) {$1} unless uri.fragment.nil?
+        if post_id != nil && post_id == 0
+            puts "#{ uri.to_s}"
         end
 
-        raw.gsub!(uri.to_s, new_uri.to_s)
+        new_uri.path += "/#{post_id.to_i}" unless post_id.nil?
+
+        converted = true
+
+      elsif uri.path == "/site/foorumi/forum.php"
+        new_uri.path = "/old_cat/#{uri_query_id}"
+        converted = true
+
+      elsif uri.path == "/site/foorumi/profile.php"
+        user = find_username_by_import_id(uri_query_id)
+        unless user.nil?
+          new_uri.path = "/u/#{user}"
+          converted = true
+        end
+
+      elsif uri.path == "/site/foorumi/search.php"
+          new_uri.path = "/search?q=#{uri_query_id}"
+          converted=true
       end
+
+      # todo /site/foorumi/avatar/#{fetch_avatar_by_import_username(...)}
+
+      raw = raw.gsub(uri.to_s, new_uri.to_s) if converted
+    rescue => error
+        p error.message
     end
+
+    raw
   end
 
   def preprocess_post_raw(raw)
