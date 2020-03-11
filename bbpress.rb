@@ -326,7 +326,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
         uri = URI(uri.to_s.match(/(.+#post-[0-9]+)/i) {$1}) rescue nil
 
       elsif u.to_s.match(/.+id=[0-9]+/) != nil
-        uri = URI(uri.to_s.match(/(.+#id=[0-9]+)/i) {$1}) rescue nil
+        uri = URI(uri.to_s.match(/(.+id=[0-9]+)/i) {$1}) rescue nil
       else
           p uri
           next
