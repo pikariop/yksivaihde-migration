@@ -383,8 +383,6 @@ class ImportScripts::Bbpress < ImportScripts::Base
           converted=true
       end
 
-      # todo /site/foorumi/avatar/#{fetch_avatar_by_import_username(...)}
-
       raw = raw.gsub(uri.to_s, new_uri.to_s) if converted
     rescue => error
         p error.message
