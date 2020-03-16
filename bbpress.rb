@@ -291,19 +291,27 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
       posts.each do |p|
         post_id = post_id_from_imported_post_id(p["post_id"])
-        topic_id = topic_lookup_from_imported_post_id(p["post_id"])[:topic_id]
-
-        unless post_id > 0
-            puts ""
-            puts "Unable to create permalink with bbpress id #{p["post_id"]}. Post not found in discourse"
-            break
-        end
-
+        topic = topic_lookup_from_imported_post_id(p["post_id"])
+        topic_id = topic.dig(:topic_id) rescue nil
         topic_url = "old/#{p["topic_id"]}"
         post_url = topic_url + "/#{p["post_id"]}"
 
-        Permalink.create(post_id: post_id, url: post_url) rescue nil
-        Permalink.create(topic_id: topic_id, url: topic_url) rescue nil
+        print "\rPost id: %d / %d [%2.2f %%] %s".freeze % [p['post_id'].to_i, total_posts.to_i, (p['post_id'].to_f / total_posts * 100).to_f, post_url.to_s]
+
+        if post_id != nil
+            Permalink.create(post_id: post_id, url: post_url) rescue nil
+        else
+            puts ""
+            puts "Unable to create permalink for bbpress post id #{p["post_id"]}. Post lookup failed."
+            break
+        end
+
+        if topic_id != nil
+            Permalink.create(topic_id: topic_id, url: topic_url) rescue nil
+        else
+            puts ""
+            puts "Unable to create permalink for bbpress post id #{p["post_id"]}. Topic lookup failed."
+        end
       end
     end
   end
