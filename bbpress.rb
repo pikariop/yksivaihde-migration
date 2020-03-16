@@ -316,6 +316,14 @@ class ImportScripts::Bbpress < ImportScripts::Base
     end
   end
 
+  def find_username_by_import_id(id)
+    userCustomField = UserCustomField.where("name='import_id' and value='#{id}'").first
+    user_id = userCustomField['user_id'] unless userCustomField.nil?
+    user = User.find(user_id) rescue nil
+    return user['username'] unless user.nil?
+  end
+
+
   def bbpress_query(sql)
     @client.query(sql, cache_rows: false)
   end
