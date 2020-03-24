@@ -11,7 +11,9 @@ Migrating legacy bbpress to Discourse
 - Ensure `rbenv` is installed and correct Ruby version is selected
 - Install `default-libmysqlclient-dev`
 - https://meta.discourse.org/t/migrating-from-bbpress-wordpress-plugin-to-discourse/48876
+- import settings from beta before migrating to local to avoid bumping into username length restrictions etc
 
 ## Import speeds 
 - users 200...250 items/min
 - posts 100ish hours
+- permalinks 2h45min
