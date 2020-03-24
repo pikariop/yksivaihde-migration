@@ -186,7 +186,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
           AND t.topic_status = 0
           AND t.topic_title IS NOT NULL
       ORDER BY p.post_id
-         LIMIT #{BATCH_SIZE}
+      LIMIT #{BATCH_SIZE}
       SQL
       ).to_a
 
