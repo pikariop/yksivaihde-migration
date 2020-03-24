@@ -403,6 +403,13 @@ class ImportScripts::Bbpress < ImportScripts::Base
     # fix whitespaces
     raw.gsub!(/(\\r)?\\n/, "\n")
     raw.gsub!("\\t", "\t")
+    raw.gsub!(/<br\s*\/>/, "")
+    raw.gsub!(/<p>/i, "")
+    raw.gsub!(/<\/p>/i, "\n")
+
+    # quote tags need to be surrounded by newlines to render correctly
+    raw.gsub!(/(.)(\[\/?quote\])/im) { "#{$1}\n#{$2}" }
+    raw.gsub!(/(\[\/?quote\])(.)/im) { "#{$1}\n#{$2}" }
 
     # [HIGHLIGHT="..."]
     raw.gsub!(/\[highlight="?(\w+)"?\]/i) { "\n```#{$1.downcase}\n" }
@@ -433,10 +440,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
 
     # [URL]...[/URL]
     # [img]...[/img]
-    # <p>...</p>
     raw.gsub!(/\[\/?url\]/i, "")
     raw.gsub!(/\[\/?img\]/i, "")
-    raw.gsub!(/\<\/?p\>/i, "")
 
     # [FONT=blah] and [COLOR=blah]
     raw.gsub! /\[FONT=.*?\](.*?)\[\/FONT\]/im, '\1'
