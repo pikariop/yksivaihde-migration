@@ -34,6 +34,7 @@ class ImportScripts::Bbpress < ImportScripts::Base
     import_users
     import_categories
     import_topics_and_posts
+    create_permalinks
   end
 
   def import_users
