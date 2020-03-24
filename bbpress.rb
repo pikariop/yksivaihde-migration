@@ -1,4 +1,3 @@
-# frozen_string_literal: true
 # Original file https://github.com/discourse/discourse/blob/master/script/import_scripts/bbpress.rb
 
 require 'htmlentities'
